@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import math
 from surprise import SVD, Dataset, Reader
+from surprise.model_selection import cross_validate
 
 app = FastAPI()
 
@@ -60,6 +61,16 @@ def retrain_model():
 
     reader = Reader(rating_scale=(0, 5))
     data = Dataset.load_from_df(df_train[['user_id', 'movie_id', 'rating']], reader)
+    
+    # --- TAMBAHKAN BAGIAN INI AGAR RMSE MUNCUL DI TERMINAL ---
+    print("\n" + "="*50)
+    print("SEDANG MENGHITUNG EVALUASI (RMSE & MAE)...")
+    # verbose=True inilah yang akan memunculkan tabel di terminal
+    results = cross_validate(SVD(), data, measures=['RMSE', 'MAE'], cv=5, verbose=True)
+    avg_rmse = results['test_rmse'].mean()
+    print("="*50 + "\n")
+    # -------------------------------------------------------
+    
     trainset = data.build_full_trainset()
 
     new_model = SVD()
