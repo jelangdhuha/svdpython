@@ -24,28 +24,40 @@ def load_data_initial():
     if os.path.exists(MOVIES_PATH):
         movies_df = pd.read_csv(MOVIES_PATH, dtype={'movie_id': int})
 
+    # B. Load Ratings
     if os.path.exists(RATINGS_PATH):
         ratings_df = pd.read_csv(RATINGS_PATH, dtype={'user_id': int, 'movie_id': int})
 
+    # C. Load Model
+    # PERBAIKAN 3: Logika Else dihapus agar model tidak ter-reset
     if os.path.exists(MODEL_PATH):
         try:
             with open(MODEL_PATH, "rb") as f:
                 model = pickle.load(f)
+            print("✅ Model SVD Loaded (Siap Prediksi).")
         except:
+            print("⚠️ Model rusak, membuat model baru (kosong).")
             model = SVD()
     else:
+        print("⚠️ Model belum ada, membuat model baru (kosong).")
         model = SVD()
 
 
 load_data_initial()
 
 
+# =========================================
+# 3. ENDPOINT: RELOAD DATA
+# =========================================
 @app.get("/system/reload-data")
 def reload_data():
     load_data_initial()
     return {"status": "success", "message": "Data reloaded"}
 
 
+# =========================================
+# 4. ENDPOINT: RETRAIN
+# =========================================
 @app.get("/system/retrain")
 def retrain_model():
     global model, ratings_df
@@ -54,6 +66,11 @@ def retrain_model():
         return {"status": "error", "message": "Ratings file not found"}
 
     df_train = pd.read_csv(RATINGS_PATH)
+
+        # Cek kolom wajib
+        required_cols = {'user_id', 'movie_id', 'rating'}
+        if not required_cols.issubset(df_train.columns):
+            return {"status": "error", "message": f"CSV Rating harus punya kolom: {required_cols}"}
 
     if df_train.empty:
         return {"status": "error", "message": "Ratings data empty"}
@@ -77,6 +94,9 @@ def retrain_model():
     }
 
 
+# =========================================
+# 5. ENDPOINT: REKOMENDASI (DENGAN FALLBACK)
+# =========================================
 @app.get("/recommend/{user_id}")
 def recommend(user_id: int, top_n: int = 10):
     global model, movies_df, ratings_df
@@ -86,14 +106,20 @@ def recommend(user_id: int, top_n: int = 10):
 
     recommendations = []
 
+    # ------------------------------------
+    # CARA 1: PREDIKSI AI (PERSONAL)
+    # ------------------------------------
     try:
+        # Cari film yg sudah ditonton
         watched_ids = []
         if not ratings_df.empty:
             watched_ids = ratings_df[ratings_df['user_id'] == user_id]['movie_id'].tolist()
 
+        # Kandidat = Semua - Sudah Ditonton
         all_movie_ids = movies_df['movie_id'].unique()
         candidates = [m for m in all_movie_ids if m not in watched_ids]
 
+        # Prediksi
         if candidates and model:
             preds = []
             for mid in candidates:
